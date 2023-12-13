@@ -5,14 +5,15 @@
 
 import time
 import digitalio
-from digitalio import DigitalInOut, Pull
-from adafruit_debouncer import Debouncer
+# from digitalio import DigitalInOut, Pull
+# from adafruit_debouncer import Debouncer
 import board
 from board import *
-import pwmio
+# import pwmio
 import asyncio
 import usb_hid
 from adafruit_hid.keyboard import Keyboard
+import neopixel
 
 # comment out these lines for non_US keyboards
 from adafruit_hid.keyboard_layout_us import KeyboardLayoutUS as KeyboardLayout
@@ -45,8 +46,8 @@ duckyCommands = {
     'F4': Keycode.F4, 'F5': Keycode.F5, 'F6': Keycode.F6, 'F7': Keycode.F7,
     'F8': Keycode.F8, 'F9': Keycode.F9, 'F10': Keycode.F10, 'F11': Keycode.F11,
     'F12': Keycode.F12,
-
 }
+
 def convertLine(line):
     newline = []
     # print(line)
@@ -93,10 +94,7 @@ def parseLine(line):
     elif(line[0:12] == "DEFAULTDELAY"):
         defaultDelay = int(line[13:]) * 10
     elif(line[0:3] == "LED"):
-        if(led.value == True):
-            led.value = False
-        else:
-            led.value = True
+        pass
     else:
         newScriptLine = convertLine(line)
         runScriptLine(newScriptLine)
@@ -106,26 +104,20 @@ layout = KeyboardLayout(kbd)
 
 
 
-
-#init button
-button1_pin = DigitalInOut(GP22) # defaults to input
-button1_pin.pull = Pull.UP      # turn on internal pull-up resistor
-button1 =  Debouncer(button1_pin)
-
 #init payload selection switch
-payload1Pin = digitalio.DigitalInOut(GP4)
+payload1Pin = digitalio.DigitalInOut(board.GP4)
 payload1Pin.switch_to_input(pull=digitalio.Pull.UP)
-payload2Pin = digitalio.DigitalInOut(GP5)
+payload2Pin = digitalio.DigitalInOut(board.GP5)
 payload2Pin.switch_to_input(pull=digitalio.Pull.UP)
-payload3Pin = digitalio.DigitalInOut(GP10)
+payload3Pin = digitalio.DigitalInOut(board.GP10)
 payload3Pin.switch_to_input(pull=digitalio.Pull.UP)
-payload4Pin = digitalio.DigitalInOut(GP11)
+payload4Pin = digitalio.DigitalInOut(board.GP11)
 payload4Pin.switch_to_input(pull=digitalio.Pull.UP)
 
 def getProgrammingStatus():
     # check GP0 for setup mode
     # see setup mode for instructions
-    progStatusPin = digitalio.DigitalInOut(GP0)
+    progStatusPin = digitalio.DigitalInOut(board.GP0)
     progStatusPin.switch_to_input(pull=digitalio.Pull.UP)
     progStatus = not progStatusPin.value
     return(progStatus)
@@ -186,79 +178,21 @@ def selectPayload():
 
     return payload
 
-async def blink_led(led):
-    print("Blink")
-    if(board.board_id == 'raspberry_pi_pico'):
-        blink_pico_led(led)
-    elif(board.board_id == 'raspberry_pi_pico_w'):
-        blink_pico_w_led(led)
+async def blink_waveshare_led():
+    print("starting blink_waveshare_led")
+    pixel = neopixel.NeoPixel(board.GP16, 1)
+    pixel.deinit()
+    pixel = neopixel.NeoPixel(board.GP16, 1)
 
-async def blink_pico_led(led):
-    print("starting blink_pico_led")
-    led_state = False
+    led_states = [(0, 100, 0), (100, 0, 0), (100, 0, 100), (0, 0, 100)]
+    led_state = 0
+
     while True:
-        if led_state:
-            #led_pwm_up(led)
-            #print("led up")
-            for i in range(100):
-                # PWM LED up and down
-                if i < 50:
-                    led.duty_cycle = int(i * 2 * 65535 / 100)  # Up
-                await asyncio.sleep(0.01)
-            led_state = False
+        if led_state < len(led_states):
+            pixel[0] = led_states[led_state] # GRB
+            pixel.write()
+            await asyncio.sleep(0.524)
+            led_state += 1
+            print("led_state", led_state)
         else:
-            #led_pwm_down(led)
-            #print("led down")
-            for i in range(100):
-                # PWM LED up and down
-                if i >= 50:
-                    led.duty_cycle = 65535 - int((i - 50) * 2 * 65535 / 100)  # Down
-                await asyncio.sleep(0.01)
-            led_state = True
-        await asyncio.sleep(0)
-
-async def blink_pico_w_led(led):
-    print("starting blink_pico_w_led")
-    led_state = False
-    while True:
-        if led_state:
-            #print("led on")
-            led.value = 1
-            await asyncio.sleep(0.5)
-            led_state = False
-        else:
-            #print("led off")
-            led.value = 0
-            await asyncio.sleep(0.5)
-            led_state = True
-        await asyncio.sleep(0.5)
-
-async def monitor_buttons(button1):
-    global inBlinkeyMode, inMenu, enableRandomBeep, enableSirenMode,pixel
-    print("starting monitor_buttons")
-    button1Down = False
-    while True:
-        button1.update()
-
-        button1Pushed = button1.fell
-        button1Released = button1.rose
-        button1Held = not button1.value
-
-        if(button1Pushed):
-            print("Button 1 pushed")
-            button1Down = True
-        if(button1Released):
-            print("Button 1 released")
-            if(button1Down):
-                print("push and released")
-
-        if(button1Released):
-            if(button1Down):
-                # Run selected payload
-                payload = selectPayload()
-                print("Running ", payload)
-                runScript(payload)
-                print("Done")
-            button1Down = False
-
-        await asyncio.sleep(0)
+            led_state = 0
